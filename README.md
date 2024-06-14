@@ -122,6 +122,15 @@ function exp(uint256 x) internal pure returns (uint256) {
 }
 ```
 
+## constructor def values (for testing purposes)
+
+uint256 _defaultLoanDuration = 30 * 24 * 60 * 60; // 30 días en segundos, 2592000 segundos
+uint256 _minInterestRate = 5; // 5%
+uint256 _maxInterestRate = 20; // 20%
+uint256 _creationFee = 10000000000000000; // 0.01 ETH en wei
+uint256 _baseExtendFee = 5000000000000000; // 0.005 ETH en wei
+
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

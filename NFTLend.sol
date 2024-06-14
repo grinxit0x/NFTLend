@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: grinxit0x - 2024
 pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -53,30 +53,42 @@ contract NFTLoan is ReentrancyGuard {
     mapping(uint256 => Loan) public loans;
 
     // Events to log important actions
-    event LoanCreated(
+    event BaseExtendFeeSet(uint256 newBaseExtendFee);
+    event CollateralReturned(
         uint256 loanId,
-        address borrower,
-        uint256 loanAmount,
-        uint256 loanDuration
+        address nftAddress,
+        uint256 tokenId
     );
-    event LoanFilled(uint256 loanId);
-    event LoanRepaid(uint256 loanId);
     event CollateralSeized(
         uint256 loanId,
         address indexed lender,
         address nftAddress,
         uint256 tokenId
     );
-    event CollateralReturned(
+    event FeeSet(uint256 newFee);
+    event FundsWithdrawn(address to, uint256 amount);
+    event LoanCreated(
         uint256 loanId,
-        address nftAddress,
-        uint256 tokenId
+        address borrower,
+        uint256 loanAmount,
+        uint256 loanDuration
     );
+    event LoanDurationSet(uint256 loanId, uint256 newLoanDuration);
     event LoanExtended(
         uint256 loanId,
         uint256 newDuration,
         uint256 newInterestRate
     );
+    event LoanFilled(uint256 loanId);
+    event LoanMaxExtensionDurationSet(
+        uint256 loanId,
+        uint256 newMaxExtensionDuration
+    );
+    event LoanRepaid(uint256 loanId);
+    event MaxInterestRateSet(uint256 newMaxInterestRate);
+    event MaxLendersSet(uint256 loanId, uint256 newMaxLenders);
+    event MaxLoansExtensionDurationSet(uint256 newMaxLoanExtensionDuration);
+    event MinInterestRateSet(uint256 newMinInterestRate);
 
     // Modifier to restrict access to the contract owner
     modifier onlyGoon() {
@@ -123,26 +135,19 @@ contract NFTLoan is ReentrancyGuard {
         goon = msg.sender;
     }
 
+    //
+    //          GOON FUNCTIONS
+    //
     // Function to set the creation fee
     function setFee(uint256 newFee) public onlyGoon {
         creationFee = newFee;
+        emit FeeSet(newFee);
     }
 
     // Function to set the base extend fee
     function setBaseExtendFee(uint256 newBaseExtendFee) public onlyGoon {
         baseExtendFee = newBaseExtendFee;
-    }
-
-    // Function to set the maximum loan extension duration for all loans
-    function setMaxLoansExtensionDuration(uint256 newMaxLoanExtensionDuration)
-        public
-        onlyGoon
-    {
-        require(
-            newMaxLoanExtensionDuration <= 4 * 365 days,
-            "Maximum extension duration cannot exceed 4 years"
-        );
-        maxLoanExtensionDuration = newMaxLoanExtensionDuration;
+        emit BaseExtendFeeSet(newBaseExtendFee);
     }
 
     // Function to set the maximum loan extension duration for a specific loan
@@ -155,6 +160,50 @@ contract NFTLoan is ReentrancyGuard {
             "Maximum extension duration cannot exceed 4 years"
         );
         loans[loanId].maxLoanExtensionDuration = newMaxExtensionDuration;
+        emit LoanMaxExtensionDurationSet(loanId, newMaxExtensionDuration);
+    }
+
+    // Function to set the maximum loan extension duration for all loans
+    function setMaxLoansExtensionDuration(uint256 newMaxLoanExtensionDuration)
+        public
+        onlyGoon
+    {
+        require(
+            newMaxLoanExtensionDuration <= 4 * 365 days,
+            "Maximum extension duration cannot exceed 4 years"
+        );
+        maxLoanExtensionDuration = newMaxLoanExtensionDuration;
+        emit MaxLoansExtensionDurationSet(newMaxLoanExtensionDuration);
+    }
+
+    // Function to set the loan duration
+    function setLoanDuration(uint256 loanId, uint256 newLoanDuration)
+        public
+        onlyGoon
+    {
+        loans[loanId].loanDuration = newLoanDuration;
+        emit LoanDurationSet(loanId, newLoanDuration);
+    }
+
+    // Function to set the maximum number of lenders for a loan
+    function setMaxLenders(uint256 loanId, uint256 newMaxLenders)
+        public
+        onlyGoon
+    {
+        loans[loanId].maxLenders = newMaxLenders;
+        emit MaxLendersSet(loanId, newMaxLenders);
+    }
+
+    // Function to set the minimum interest rate
+    function setMinInterestRate(uint256 newMinInterestRate) public onlyGoon {
+        minInterestRate = newMinInterestRate;
+        emit MinInterestRateSet(newMinInterestRate);
+    }
+
+    // Function to set the maximum interest rate
+    function setMaxInterestRate(uint256 newMaxInterestRate) public onlyGoon {
+        maxInterestRate = newMaxInterestRate;
+        emit MaxInterestRateSet(newMaxInterestRate);
     }
 
     // Function to withdraw funds from the contract
@@ -168,34 +217,12 @@ contract NFTLoan is ReentrancyGuard {
             "Insufficient contract balance"
         );
         to.transfer(amount);
+        emit FundsWithdrawn(to, amount);
     }
 
-    // Function to set the loan duration
-    function setLoanDuration(uint256 loanId, uint256 newLoanDuration)
-        public
-        onlyGoon
-    {
-        loans[loanId].loanDuration = newLoanDuration;
-    }
-
-    // Function to set the maximum number of lenders for a loan
-    function setMaxLenders(uint256 loanId, uint256 newMaxLenders)
-        public
-        onlyGoon
-    {
-        loans[loanId].maxLenders = newMaxLenders;
-    }
-
-    // Function to set the minimum interest rate
-    function setMinInterestRate(uint256 newMinInterestRate) public onlyGoon {
-        minInterestRate = newMinInterestRate;
-    }
-
-    // Function to set the maximum interest rate
-    function setMaxInterestRate(uint256 newMaxInterestRate) public onlyGoon {
-        maxInterestRate = newMaxInterestRate;
-    }
-
+    //
+    //          MAIN FUNCTIONS
+    //
     // Function to create a new loan
     function createLoan(uint256 loanAmount, uint256 maxLenders) public payable {
         require(msg.value >= creationFee, "Insufficient fee");
@@ -232,6 +259,7 @@ contract NFTLoan is ReentrancyGuard {
             tokenId
         );
         loans[loanId].collaterals.push(Collateral(nftAddress, tokenId));
+        emit CollateralReturned(loanId, nftAddress, tokenId);
     }
 
     // Function for lenders to fund the loan
@@ -267,7 +295,7 @@ contract NFTLoan is ReentrancyGuard {
         require(block.timestamp <= loan.loanEndTime, "Loan duration has ended");
         require(!loan.loanRepaid, "Loan is already repaid");
 
-        uint256 interestRate = calculateInterestRate(loanId, 0, false);
+        uint256 interestRate = _calculateInterestRate(loanId, 0, false);
         uint256 totalRepayment = loan.loanAmount +
             ((loan.loanAmount * interestRate) / 100);
         require(msg.value == totalRepayment, "Incorrect repayment amount");
@@ -337,13 +365,16 @@ contract NFTLoan is ReentrancyGuard {
             "Cannot extend beyond the maximum allowed duration"
         );
 
-        uint256 extendFee = calculateExtendFee(loan.loanAmount, additionalTime);
+        uint256 extendFee = _calculateExtendFee(
+            loan.loanAmount,
+            additionalTime
+        );
         require(msg.value >= extendFee, "Insufficient fee");
 
         loan.loanDuration += additionalTime;
         loan.loanEndTime += additionalTime;
 
-        uint256 newInterestRate = calculateInterestRate(
+        uint256 newInterestRate = _calculateInterestRate(
             loanId,
             additionalTime,
             true
@@ -402,6 +433,7 @@ contract NFTLoan is ReentrancyGuard {
         require(!loan.loanFilled, "Cannot cancel a filled loan");
         require(!loan.loanRepaid, "Cannot cancel a repaid loan");
 
+        // Return collaterals to the borrower
         for (uint256 i = 0; i < loan.collaterals.length; i++) {
             IERC721(loan.collaterals[i].nftAddress).safeTransferFrom(
                 address(this),
@@ -415,6 +447,21 @@ contract NFTLoan is ReentrancyGuard {
             );
         }
 
+        // Return funds to lenders
+        for (uint256 i = 0; i < loan.lenders.length; i++) {
+            address lender = loan.lenders[i].lender;
+            uint256 amount = loan.lenders[i].amount;
+
+            // Use assembly to transfer the funds to save gas
+            assembly {
+                let success := call(gas(), lender, amount, 0, 0, 0, 0)
+                if iszero(success) {
+                    revert(0, 0)
+                }
+            }
+        }
+
+        // Delete the loan
         delete loans[loanId];
     }
 
@@ -426,7 +473,7 @@ contract NFTLoan is ReentrancyGuard {
             "Cannot withdraw funds after the loan is filled"
         );
 
-        uint256 lenderIndex = findLenderIndex(loanId, msg.sender);
+        uint256 lenderIndex = _findLenderIndex(loanId, msg.sender);
         require(
             lenderIndex < loan.lenders.length,
             "You are not a lender for this loan"
@@ -434,18 +481,27 @@ contract NFTLoan is ReentrancyGuard {
 
         uint256 amount = loan.lenders[lenderIndex].amount;
 
-        // Remove lender from lenders array
-        for (uint256 i = lenderIndex; i < loan.lenders.length - 1; i++) {
-            loan.lenders[i] = loan.lenders[i + 1];
+        // Remove lender from lenders array and shift elements
+        if (lenderIndex < loan.lenders.length - 1) {
+            for (uint256 i = lenderIndex; i < loan.lenders.length - 1; i++) {
+                loan.lenders[i] = loan.lenders[i + 1];
+            }
         }
         loan.lenders.pop();
 
         loan.totalLentAmount -= amount;
-        payable(msg.sender).transfer(amount);
+
+        // Use assembly to transfer the funds to save gas
+        assembly {
+            let success := call(gas(), caller(), amount, 0, 0, 0, 0)
+            if iszero(success) {
+                revert(0, 0)
+            }
+        }
     }
 
     // Internal function to find lender index
-    function findLenderIndex(uint256 loanId, address lenderAddress)
+    function _findLenderIndex(uint256 loanId, address lenderAddress)
         internal
         view
         returns (uint256)
@@ -470,7 +526,7 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Internal function to calculate the interest rate based on the elapsed time using exponential growth
-    function calculateInterestRate(
+    function _calculateInterestRate(
         uint256 loanId,
         uint256 additionalTime,
         bool isExtension
@@ -500,7 +556,7 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Internal function to calculate the extend fee
-    function calculateExtendFee(uint256 loanAmount, uint256 additionalTime)
+    function _calculateExtendFee(uint256 loanAmount, uint256 additionalTime)
         internal
         view
         returns (uint256)
