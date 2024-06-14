@@ -1,6 +1,4 @@
-Here's the updated `README.md` for your GitHub project:
 
-```markdown
 # NFTLoan Smart Contract
 
 The NFTLoan smart contract allows users to create, fund, and manage loans backed by NFTs. Borrowers can provide NFTs as collateral, and lenders can fund these loans with the potential of earning interest. The contract includes functionalities for creating loans, extending loan durations, and managing collateral.
