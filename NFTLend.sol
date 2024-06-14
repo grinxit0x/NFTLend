@@ -354,29 +354,6 @@ contract NFTLoan is ReentrancyGuard {
         }
     }
 
-    // Function for the borrower to reclaim collateral if the loan is not filled
-    function reclaimCollateral(uint256 loanId)
-        public
-        onlyBorrower(loanId)
-        nonReentrant
-    {
-        Loan storage loan = loans[loanId];
-        require(!loan.loanFilled, "Loan was not filled, reclaiming collateral");
-
-        for (uint256 i = 0; i < loan.collaterals.length; i++) {
-            IERC721(loan.collaterals[i].nftAddress).safeTransferFrom(
-                address(this),
-                loan.borrower,
-                loan.collaterals[i].tokenId
-            );
-            emit CollateralReturned(
-                loanId,
-                loan.collaterals[i].nftAddress,
-                loan.collaterals[i].tokenId
-            );
-        }
-    }
-
     // Function for the borrower to cancel the loan if it is not filled
     function cancelLoan(uint256 loanId)
         public
@@ -401,6 +378,47 @@ contract NFTLoan is ReentrancyGuard {
         }
 
         delete loans[loanId];
+    }
+
+    // Function for lenders to withdraw their funds before the loan is filled
+    function withdrawFundsBeforeLoanFilled(uint256 loanId) public nonReentrant {
+        Loan storage loan = loans[loanId];
+        require(
+            !loan.loanFilled,
+            "Cannot withdraw funds after the loan is filled"
+        );
+
+        uint256 lenderIndex = findLenderIndex(loanId, msg.sender);
+        require(
+            lenderIndex < loan.lenders.length,
+            "You are not a lender for this loan"
+        );
+
+        uint256 amount = loan.lenders[lenderIndex].amount;
+
+        // Remove lender from lenders array
+        for (uint256 i = lenderIndex; i < loan.lenders.length - 1; i++) {
+            loan.lenders[i] = loan.lenders[i + 1];
+        }
+        loan.lenders.pop();
+
+        loan.totalLentAmount -= amount;
+        payable(msg.sender).transfer(amount);
+    }
+
+    // Internal function to find lender index
+    function findLenderIndex(uint256 loanId, address lenderAddress)
+        internal
+        view
+        returns (uint256)
+    {
+        Loan storage loan = loans[loanId];
+        for (uint256 i = 0; i < loan.lenders.length; i++) {
+            if (loan.lenders[i].lender == lenderAddress) {
+                return i;
+            }
+        }
+        revert("Lender not found");
     }
 
     // Function to get the number of collaterals for a loan
