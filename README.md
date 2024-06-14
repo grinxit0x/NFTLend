@@ -1,4 +1,3 @@
-
 # NFTLoan Smart Contract
 
 The NFTLoan smart contract allows users to create, fund, and manage loans backed by NFTs. Borrowers can provide NFTs as collateral, and lenders can fund these loans with the potential of earning interest. The contract includes functionalities for creating loans, extending loan durations, and managing collateral.
@@ -22,7 +21,8 @@ The NFTLoan smart contract allows users to create, fund, and manage loans backed
 - `uint256 public creationFee`: Fee for creating a loan.
 - `uint256 public minInterestRate`: Minimum interest rate for loans.
 - `uint256 public maxInterestRate`: Maximum interest rate for loans.
-- `uint256 public extendFee`: Fee for extending the loan duration.
+- `uint256 public baseExtendFee`: Base fee for extending the loan duration.
+- `uint256 public maxLoanExtensionDuration`: Maximum loan extension duration (default 2 years).
 
 ### Structs
 
@@ -50,6 +50,9 @@ The NFTLoan smart contract allows users to create, fund, and manage loans backed
 1. **Administrative Functions**
    - `constructor`
    - `setFee`
+   - `setBaseExtendFee`
+   - `setMaxLoansExtensionDuration`
+   - `setLoanMaxExtensionDuration`
    - `withdrawFunds`
    - `setLoanDuration`
    - `setMaxLenders`
@@ -75,6 +78,7 @@ The NFTLoan smart contract allows users to create, fund, and manage loans backed
    - `getCollateralCount`
    - `getLenderCount`
    - `calculateInterestRate`
+   - `calculateExtendFee`
    - `exp`
 
 ## Interest Calculation
