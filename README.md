@@ -48,6 +48,16 @@ NFTLoan is a Solidity smart contract that allows users to take out loans backed 
 - `calculateInterestRate`: Calculates the interest rate based on elapsed time using exponential growth.
 - `exp`: Calculates the exponential of a number (e^x).
 
+## Interest Rate Curve
+
+The interest rate for the loans is calculated using an exponential growth model. The interest rate increases over time, creating a steeper curve as the loan duration progresses. This ensures that loans are repaid in a timely manner, with increasing penalties for delays. 
+
+### Key Points:
+
+- **Exponential Growth**: The interest rate grows exponentially with time, meaning the longer the duration, the higher the interest.
+- **Extension Penalty**: Extending a loan duration incurs an additional interest rate penalty, making the curve even steeper.
+- **Calculation**: The `calculateInterestRate` function uses a higher adjustment factor for extensions, reflecting a sharper increase in interest.
+
 ## Deployment
 
 To deploy this contract, use your preferred tool (such as Remix, Hardhat, or Truffle) and ensure you have the Solidity compiler version ^0.8.26 installed.
