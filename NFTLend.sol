@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract NFTLoan is ReentrancyGuard {
     // Contract owner
@@ -51,6 +52,8 @@ contract NFTLoan is ReentrancyGuard {
     uint256 public defaultLoanDuration;
     // Mapping to store loans by their ID
     mapping(uint256 => Loan) public loans;
+    // Mapping from NFT contract address to its price feed
+    mapping(address => AggregatorV3Interface) public priceFeeds;
 
     // Events to log important actions
     event BaseExtendFeeSet(uint256 newBaseExtendFee);
@@ -136,8 +139,9 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     //
-    //          GOON FUNCTIONS
+    //          ONLYGOON FUNCTIONS
     //
+
     // Function to set the creation fee
     function setFee(uint256 newFee) public onlyGoon {
         creationFee = newFee;
@@ -164,10 +168,9 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Function to set the maximum loan extension duration for all loans
-    function setMaxLoansExtensionDuration(uint256 newMaxLoanExtensionDuration)
-        public
-        onlyGoon
-    {
+    function setMaxLoansExtensionDuration(
+        uint256 newMaxLoanExtensionDuration
+    ) public onlyGoon {
         require(
             newMaxLoanExtensionDuration <= 4 * 365 days,
             "Maximum extension duration cannot exceed 4 years"
@@ -177,19 +180,19 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Function to set the loan duration
-    function setLoanDuration(uint256 loanId, uint256 newLoanDuration)
-        public
-        onlyGoon
-    {
+    function setLoanDuration(
+        uint256 loanId,
+        uint256 newLoanDuration
+    ) public onlyGoon {
         loans[loanId].loanDuration = newLoanDuration;
         emit LoanDurationSet(loanId, newLoanDuration);
     }
 
     // Function to set the maximum number of lenders for a loan
-    function setMaxLenders(uint256 loanId, uint256 newMaxLenders)
-        public
-        onlyGoon
-    {
+    function setMaxLenders(
+        uint256 loanId,
+        uint256 newMaxLenders
+    ) public onlyGoon {
         loans[loanId].maxLenders = newMaxLenders;
         emit MaxLendersSet(loanId, newMaxLenders);
     }
@@ -206,12 +209,19 @@ contract NFTLoan is ReentrancyGuard {
         emit MaxInterestRateSet(newMaxInterestRate);
     }
 
+    // Function to set the price feed for a specific NFT contract address
+    function setPriceFeed(
+        address nftAddress,
+        address priceFeedAddress
+    ) public onlyGoon {
+        priceFeeds[nftAddress] = AggregatorV3Interface(priceFeedAddress);
+    }
+
     // Function to withdraw funds from the contract
-    function withdrawFunds(address payable to, uint256 amount)
-        public
-        onlyGoon
-        nonReentrant
-    {
+    function withdrawFunds(
+        address payable to,
+        uint256 amount
+    ) public onlyGoon nonReentrant {
         require(
             amount <= address(this).balance,
             "Insufficient contract balance"
@@ -223,6 +233,7 @@ contract NFTLoan is ReentrancyGuard {
     //
     //          MAIN FUNCTIONS
     //
+
     // Function to create a new loan
     function createLoan(uint256 loanAmount, uint256 maxLenders) public payable {
         require(msg.value >= creationFee, "Insufficient fee");
@@ -284,12 +295,9 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Function for the borrower to repay the loan
-    function repayLoan(uint256 loanId)
-        public
-        payable
-        onlyBorrower(loanId)
-        nonReentrant
-    {
+    function repayLoan(
+        uint256 loanId
+    ) public payable onlyBorrower(loanId) nonReentrant {
         Loan storage loan = loans[loanId];
         require(loan.loanFilled, "Loan is not filled yet");
         require(block.timestamp <= loan.loanEndTime, "Loan duration has ended");
@@ -351,12 +359,10 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Function to extend the loan duration
-    function extendLoanDuration(uint256 loanId, uint256 additionalTime)
-        public
-        payable
-        onlyBorrower(loanId)
-        nonReentrant
-    {
+    function extendLoanDuration(
+        uint256 loanId,
+        uint256 additionalTime
+    ) public payable onlyBorrower(loanId) nonReentrant {
         Loan storage loan = loans[loanId];
         require(loan.loanFilled, "Loan is not filled yet");
         require(block.timestamp <= loan.loanEndTime, "Loan duration has ended");
@@ -383,11 +389,9 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Function for lenders to seize collateral if the loan is not repaid on time
-    function seizeCollateral(uint256 loanId)
-        public
-        onlyLenders(loanId)
-        nonReentrant
-    {
+    function seizeCollateral(
+        uint256 loanId
+    ) public onlyLenders(loanId) nonReentrant {
         Loan storage loan = loans[loanId];
         require(!loan.loanRepaid, "Loan is already repaid");
         require(
@@ -395,40 +399,73 @@ contract NFTLoan is ReentrancyGuard {
             "Loan duration has not ended"
         );
 
-        uint256 remainingCollaterals = loan.collaterals.length;
+        // Sort collaterals by value in descending order
+        Collateral[] memory sortedCollaterals = loan.collaterals;
+        uint256 n = sortedCollaterals.length;
+        for (uint256 i = 0; i < n; i++) {
+            for (uint256 j = i + 1; j < n; j++) {
+                if (
+                    _getNFTValue(sortedCollaterals[i].nftAddress) <
+                    _getNFTValue(sortedCollaterals[j].nftAddress)
+                ) {
+                    (sortedCollaterals[i], sortedCollaterals[j]) = (
+                        sortedCollaterals[j],
+                        sortedCollaterals[i]
+                    );
+                }
+            }
+        }
+
+        // Distribute collaterals to lenders based on their share of the loan amount
+        uint256 totalLentAmount = loan.totalLentAmount;
+        uint256 collateralIndex = 0;
         for (uint256 i = 0; i < loan.lenders.length; i++) {
-            uint256 lenderShare = (loan.lenders[i].amount *
-                remainingCollaterals) / loan.totalLentAmount;
-            for (
-                uint256 j = 0;
-                j < lenderShare && loan.collaterals.length > 0;
-                j++
-            ) {
-                Collateral memory collateral = loan.collaterals[
-                    loan.collaterals.length - 1
+            uint256 lenderAmount = loan.lenders[i].amount;
+            uint256 lenderShare = (lenderAmount * n) / totalLentAmount;
+            for (uint256 j = 0; j < lenderShare && collateralIndex < n; j++) {
+                Collateral memory collateral = sortedCollaterals[
+                    collateralIndex
                 ];
-                IERC721(collateral.nftAddress).safeTransferFrom(
-                    address(this),
-                    loan.lenders[i].lender,
-                    collateral.tokenId
-                );
+                address lender = loan.lenders[i].lender;
+
+                // Use assembly to transfer the NFT to the lender to save gas
+                assembly {
+                    let nftAddress := mload(add(collateral, 0x20))
+                    let tokenId := mload(add(collateral, 0x40))
+                    let success := call(
+                        gas(),
+                        nftAddress,
+                        0,
+                        add(tokenId, 0x44),
+                        0x44,
+                        0,
+                        0
+                    )
+                    if iszero(success) {
+                        revert(0, 0)
+                    }
+                }
+
                 emit CollateralSeized(
                     loanId,
-                    loan.lenders[i].lender,
+                    lender,
                     collateral.nftAddress,
                     collateral.tokenId
                 );
-                loan.collaterals.pop();
+                collateralIndex++;
             }
+        }
+
+        // Remove transferred collaterals from loan.collaterals
+        for (uint256 i = 0; i < collateralIndex; i++) {
+            loan.collaterals.pop();
         }
     }
 
     // Function for the borrower to cancel the loan if it is not filled
-    function cancelLoan(uint256 loanId)
-        public
-        onlyBorrower(loanId)
-        nonReentrant
-    {
+    function cancelLoan(
+        uint256 loanId
+    ) public onlyBorrower(loanId) nonReentrant {
         Loan storage loan = loans[loanId];
         require(!loan.loanFilled, "Cannot cancel a filled loan");
         require(!loan.loanRepaid, "Cannot cancel a repaid loan");
@@ -501,11 +538,10 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Internal function to find lender index
-    function _findLenderIndex(uint256 loanId, address lenderAddress)
-        internal
-        view
-        returns (uint256)
-    {
+    function _findLenderIndex(
+        uint256 loanId,
+        address lenderAddress
+    ) internal view returns (uint256) {
         Loan storage loan = loans[loanId];
         for (uint256 i = 0; i < loan.lenders.length; i++) {
             if (loan.lenders[i].lender == lenderAddress) {
@@ -556,16 +592,31 @@ contract NFTLoan is ReentrancyGuard {
     }
 
     // Internal function to calculate the extend fee
-    function _calculateExtendFee(uint256 loanAmount, uint256 additionalTime)
-        internal
-        view
-        returns (uint256)
-    {
+    function _calculateExtendFee(
+        uint256 loanAmount,
+        uint256 additionalTime
+    ) internal view returns (uint256) {
         uint256 maxInterest = (loanAmount * maxInterestRate) / 100;
         uint256 extendFee = baseExtendFee +
             (maxInterest * additionalTime) /
             (365 days);
         return extendFee;
+    }
+
+    // Returns the latest price of the NFT.
+    function _getNFTValue(address nftAddress) internal view returns (uint256) {
+        AggregatorV3Interface priceFeed = priceFeeds[nftAddress];
+        require(
+            address(priceFeed) != address(0),
+            "Price feed not set for this NFT"
+        );
+
+        // Fetch the latest price from the price feed
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        require(price > 0, "Invalid price data");
+
+        // Directly use the price fetched from the oracle as the NFT value
+        return uint256(price);
     }
 
     // Helper function to calculate the exponential of a number (e^x)

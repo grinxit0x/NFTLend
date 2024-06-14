@@ -32,12 +32,21 @@ The NFTLoan smart contract allows users to create, fund, and manage loans backed
 
 ### Events
 
-- `LoanCreated`: Emitted when a loan is created.
-- `LoanFilled`: Emitted when a loan is filled.
-- `LoanRepaid`: Emitted when a loan is repaid.
-- `CollateralSeized`: Emitted when collateral is seized.
+- `BaseExtendFeeSet`: Emitted when the base extend fee is set.
 - `CollateralReturned`: Emitted when collateral is returned to the borrower.
+- `CollateralSeized`: Emitted when collateral is seized.
+- `FeeSet`: Emitted when the creation fee is set.
+- `FundsWithdrawn`: Emitted when funds are withdrawn from the contract.
+- `LoanCreated`: Emitted when a loan is created.
+- `LoanDurationSet`: Emitted when the loan duration is set.
 - `LoanExtended`: Emitted when a loan duration is extended.
+- `LoanFilled`: Emitted when a loan is filled.
+- `LoanMaxExtensionDurationSet`: Emitted when the maximum loan extension duration is set.
+- `LoanRepaid`: Emitted when a loan is repaid.
+- `MaxInterestRateSet`: Emitted when the maximum interest rate is set.
+- `MaxLendersSet`: Emitted when the maximum number of lenders is set.
+- `MaxLoansExtensionDurationSet`: Emitted when the maximum loan extension duration is set for all loans.
+- `MinInterestRateSet`: Emitted when the minimum interest rate is set.
 
 ### Modifiers
 
@@ -58,6 +67,7 @@ The NFTLoan smart contract allows users to create, fund, and manage loans backed
    - `setMaxLenders`
    - `setMinInterestRate`
    - `setMaxInterestRate`
+   - `setPriceFeed`
 
 2. **Main Loan Functions**
    - `createLoan`
@@ -124,15 +134,14 @@ function exp(uint256 x) internal pure returns (uint256) {
 
 ## constructor def values (for testing purposes)
 
-uint256 _defaultLoanDuration = 30 * 24 * 60 * 60; // 30 días en segundos, 2592000 segundos
+uint256 _defaultLoanDuration = 30 * 24 * 60 * 60; // 30 days in seconds, 2592000 seconds
 uint256 _minInterestRate = 5; // 5%
 uint256 _maxInterestRate = 20; // 20%
-uint256 _creationFee = 10000000000000000; // 0.01 ETH en wei
-uint256 _baseExtendFee = 5000000000000000; // 0.005 ETH en wei
-
+uint256 _creationFee = 10000000000000000; // 0.01 ETH in wei
+uint256 _baseExtendFee = 5000000000000000; // 0.005 ETH in wei
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-This README file is now updated with the current state of your contract and includes details on the exponential interest rate calculation.
+This README should provide a comprehensive overview of your `NFTLoan` contract, including its features, contract structure, and detailed descriptions of each function and variable.
