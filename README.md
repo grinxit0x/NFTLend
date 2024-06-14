@@ -1,67 +1,127 @@
+Here's the updated `README.md` for your GitHub project:
+
+```markdown
 # NFTLoan Smart Contract
 
-NFTLoan is a Solidity smart contract that allows users to take out loans backed by NFTs. The contract enables the creation of loans, the provision of collateral, the funding of loans by lenders, the repayment of loans, and the extension of loan durations.
+The NFTLoan smart contract allows users to create, fund, and manage loans backed by NFTs. Borrowers can provide NFTs as collateral, and lenders can fund these loans with the potential of earning interest. The contract includes functionalities for creating loans, extending loan durations, and managing collateral.
 
 ## Features
 
-- **Loan Creation**: Users can create new loans by specifying the amount and maximum number of lenders.
-- **Collateral Provision**: Borrowers can provide NFTs as collateral for the loans.
-- **Loan Funding**: Lenders can fund loans and earn interest on their funds.
-- **Loan Repayment**: Borrowers can repay loans along with the calculated interest.
-- **Loan Extension**: Borrowers can extend the loan duration by paying an additional fee.
+- **Loan Creation:** Borrowers can create loans specifying the loan amount and maximum number of lenders.
+- **Collateral Management:** Borrowers can provide NFTs as collateral for their loans.
+- **Loan Funding:** Lenders can fund loans and earn interest on their contributions.
+- **Loan Repayment:** Borrowers can repay loans along with interest.
+- **Loan Extension:** Borrowers can extend the duration of their loans with an increased interest rate.
+- **Collateral Seizure:** Lenders can seize collateral if the loan is not repaid on time.
+- **Withdraw Funds Before Loan is Filled:** Lenders can withdraw their funds before the loan is filled.
+- **Interest Calculation:** The contract calculates interest using an exponential growth model, with an option for steeper growth when extending the loan duration.
 
-## Events
+## Contract Structure
 
-- `LoanCreated`: Emitted when a new loan is created.
-- `LoanFilled`: Emitted when a loan is fully funded.
+### Variables and Structures
+
+- `address public goon`: Contract owner.
+- `uint256 public creationFee`: Fee for creating a loan.
+- `uint256 public minInterestRate`: Minimum interest rate for loans.
+- `uint256 public maxInterestRate`: Maximum interest rate for loans.
+- `uint256 public extendFee`: Fee for extending the loan duration.
+
+### Structs
+
+- `struct Lender`: Stores lender details.
+- `struct Collateral`: Stores NFT collateral details.
+- `struct Loan`: Stores loan details.
+
+### Events
+
+- `LoanCreated`: Emitted when a loan is created.
+- `LoanFilled`: Emitted when a loan is filled.
 - `LoanRepaid`: Emitted when a loan is repaid.
-- `CollateralSeized`: Emitted when collateral is seized for non-repayment.
+- `CollateralSeized`: Emitted when collateral is seized.
 - `CollateralReturned`: Emitted when collateral is returned to the borrower.
-- `LoanExtended`: Emitted when the loan duration is extended.
+- `LoanExtended`: Emitted when a loan duration is extended.
 
-## Structures
+### Modifiers
 
-- **Lender**: Stores lender details.
-- **Collateral**: Stores NFT collateral details.
-- **Loan**: Stores loan details.
+- `onlyGoon`: Restricts access to the contract owner.
+- `onlyBorrower`: Restricts access to the borrower of a loan.
+- `onlyLenders`: Restricts access to the lenders of a loan.
 
-## Main Functions
+### Functions
 
-### Loan Creation and Management
+1. **Administrative Functions**
+   - `constructor`
+   - `setFee`
+   - `withdrawFunds`
+   - `setLoanDuration`
+   - `setMaxLenders`
+   - `setMinInterestRate`
+   - `setMaxInterestRate`
 
-- `createLoan`: Creates a new loan.
-- `provideCollateral`: Provides collateral for a loan.
-- `fundLoan`: Funds a loan.
-- `repayLoan`: Repays a loan.
-- `extendLoanDuration`: Extends the loan duration.
+2. **Main Loan Functions**
+   - `createLoan`
+   - `provideCollateral`
+   - `fundLoan`
+   - `repayLoan`
+   - `extendLoanDuration`
 
-### Collateral Management
+3. **Collateral Management**
+   - `seizeCollateral`
+   - `cancelLoan`
 
-- `seizeCollateral`: Seizes collateral if the loan is not repaid on time.
-- `reclaimCollateral`: Reclaims collateral if the loan is not funded.
-- `cancelLoan`: Cancels an unfunded loan.
+4. **Lender Management**
+   - `withdrawFundsBeforeLoanFilled`
 
-### Utilities
+5. **Utility Functions**
+   - `findLenderIndex`
+   - `getCollateralCount`
+   - `getLenderCount`
+   - `calculateInterestRate`
+   - `exp`
 
-- `getCollateralCount`: Gets the number of collaterals for a loan.
-- `getLenderCount`: Gets the number of lenders for a loan.
-- `calculateInterestRate`: Calculates the interest rate based on elapsed time using exponential growth.
-- `exp`: Calculates the exponential of a number (e^x).
+## Interest Calculation
 
-## Interest Rate Curve
+The interest rate is calculated based on the elapsed time using an exponential growth model. When extending the loan duration, the interest rate grows more steeply to incentivize timely repayments.
 
-The interest rate for the loans is calculated using an exponential growth model. The interest rate increases over time, creating a steeper curve as the loan duration progresses. This ensures that loans are repaid in a timely manner, with increasing penalties for delays. 
+```solidity
+function calculateInterestRate(
+    uint256 loanId,
+    uint256 additionalTime,
+    bool isExtension
+) internal view returns (uint256) {
+    Loan storage loan = loans[loanId];
+    uint256 elapsedTime = block.timestamp - (loan.loanEndTime - loan.loanDuration);
+    uint256 duration = isExtension ? loan.loanDuration + additionalTime : loan.loanDuration;
 
-### Key Points:
+    if (elapsedTime >= duration) {
+        return maxInterestRate + (isExtension ? 2 : 0);
+    }
 
-- **Exponential Growth**: The interest rate grows exponentially with time, meaning the longer the duration, the higher the interest.
-- **Extension Penalty**: Extending a loan duration incurs an additional interest rate penalty, making the curve even steeper.
-- **Calculation**: The `calculateInterestRate` function uses a higher adjustment factor for extensions, reflecting a sharper increase in interest.
+    uint256 adjustmentFactor = isExtension ? 2e18 : 1.5e18;
+    uint256 elapsedRatio = (elapsedTime * 1e18) / duration;
+    uint256 exponentialGrowth = exp((elapsedRatio * adjustmentFactor) / 1e18);
 
-## Deployment
+    uint256 interestRate = minInterestRate +
+        (((maxInterestRate + (isExtension ? 2 : 0)) - minInterestRate) * (exponentialGrowth - 1)) /
+        (exp(adjustmentFactor) - 1);
+    return interestRate;
+}
 
-To deploy this contract, use your preferred tool (such as Remix, Hardhat, or Truffle) and ensure you have the Solidity compiler version ^0.8.26 installed.
+function exp(uint256 x) internal pure returns (uint256) {
+    uint256 sum = 1e18;
+    uint256 term = 1e18;
+
+    for (uint256 i = 1; i < 10; i++) {
+        term = (term * x) / (i * 1e18);
+        sum += term;
+    }
+
+    return sum;
+}
+```
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+This README file is now updated with the current state of your contract and includes details on the exponential interest rate calculation.
