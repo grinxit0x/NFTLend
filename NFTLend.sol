@@ -13,8 +13,10 @@ contract NFTLoan is ReentrancyGuard {
     uint256 public minInterestRate;
     // Maximum interest rate for loans
     uint256 public maxInterestRate;
-
-    uint256 public extendFee = 0.1 ether; // Tarifa para extender el plazo
+    // Base fee for extending the loan duration
+    uint256 public baseExtendFee;
+    // Maximum loan extension duration
+    uint256 public maxLoanExtensionDuration;
 
     // Lender structure to store lender details
     struct Lender {
@@ -35,6 +37,7 @@ contract NFTLoan is ReentrancyGuard {
         uint256 loanDuration;
         uint256 loanEndTime;
         uint256 maxLenders;
+        uint256 maxLoanExtensionDuration;
         bool loanFilled;
         bool loanRepaid;
         Lender[] lenders;
@@ -108,18 +111,50 @@ contract NFTLoan is ReentrancyGuard {
         uint256 _defaultLoanDuration,
         uint256 _minInterestRate,
         uint256 _maxInterestRate,
-        uint256 _creationFee
+        uint256 _creationFee,
+        uint256 _baseExtendFee
     ) {
         defaultLoanDuration = _defaultLoanDuration;
         minInterestRate = _minInterestRate;
         maxInterestRate = _maxInterestRate;
         creationFee = _creationFee;
+        baseExtendFee = _baseExtendFee;
+        maxLoanExtensionDuration = 2 * 365 days;
         goon = msg.sender;
     }
 
     // Function to set the creation fee
     function setFee(uint256 newFee) public onlyGoon {
         creationFee = newFee;
+    }
+
+    // Function to set the base extend fee
+    function setBaseExtendFee(uint256 newBaseExtendFee) public onlyGoon {
+        baseExtendFee = newBaseExtendFee;
+    }
+
+    // Function to set the maximum loan extension duration for all loans
+    function setMaxLoansExtensionDuration(uint256 newMaxLoanExtensionDuration)
+        public
+        onlyGoon
+    {
+        require(
+            newMaxLoanExtensionDuration <= 4 * 365 days,
+            "Maximum extension duration cannot exceed 4 years"
+        );
+        maxLoanExtensionDuration = newMaxLoanExtensionDuration;
+    }
+
+    // Function to set the maximum loan extension duration for a specific loan
+    function setLoanMaxExtensionDuration(
+        uint256 loanId,
+        uint256 newMaxExtensionDuration
+    ) public onlyGoon {
+        require(
+            newMaxExtensionDuration <= 4 * 365 days,
+            "Maximum extension duration cannot exceed 4 years"
+        );
+        loans[loanId].maxLoanExtensionDuration = newMaxExtensionDuration;
     }
 
     // Function to withdraw funds from the contract
@@ -171,6 +206,7 @@ contract NFTLoan is ReentrancyGuard {
         newLoan.loanAmount = loanAmount;
         newLoan.loanDuration = defaultLoanDuration;
         newLoan.maxLenders = maxLenders;
+        newLoan.maxLoanExtensionDuration = maxLoanExtensionDuration; // Inicializar con la duración máxima configurada
 
         emit LoanCreated(
             loanCounter,
@@ -293,14 +329,16 @@ contract NFTLoan is ReentrancyGuard {
         onlyBorrower(loanId)
         nonReentrant
     {
-        require(msg.value >= extendFee, "Insufficient fee");
         Loan storage loan = loans[loanId];
         require(loan.loanFilled, "Loan is not filled yet");
         require(block.timestamp <= loan.loanEndTime, "Loan duration has ended");
         require(
-            loan.loanDuration + additionalTime <= 12 * 30 days,
-            "Cannot extend beyond 12 months"
+            loan.loanDuration + additionalTime <= loan.maxLoanExtensionDuration,
+            "Cannot extend beyond the maximum allowed duration"
         );
+
+        uint256 extendFee = calculateExtendFee(loan.loanAmount, additionalTime);
+        require(msg.value >= extendFee, "Insufficient fee");
 
         loan.loanDuration += additionalTime;
         loan.loanEndTime += additionalTime;
@@ -459,6 +497,19 @@ contract NFTLoan is ReentrancyGuard {
                 (exponentialGrowth - 1)) /
             (exp(adjustmentFactor) - 1);
         return interestRate;
+    }
+
+    // Internal function to calculate the extend fee
+    function calculateExtendFee(uint256 loanAmount, uint256 additionalTime)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 maxInterest = (loanAmount * maxInterestRate) / 100;
+        uint256 extendFee = baseExtendFee +
+            (maxInterest * additionalTime) /
+            (365 days);
+        return extendFee;
     }
 
     // Helper function to calculate the exponential of a number (e^x)
